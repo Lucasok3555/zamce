@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acesso ao Site</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        
+        #loginBox {
+            max-width: 400px;
+            margin: 100px auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h2 {
+            margin-top: 0;
+        }
+        
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        
+        button {
+            width: 100%;
+            padding: 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        #content {
+            display: none;
+            max-width: 800px;
+            margin: 20px auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+        }
+        
+        #error {
+            color: red;
+            margin-top: 10px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <!-- Tela de Login -->
+    <div id="loginBox">
+        <h2>Digite seu nome para entrar</h2>
+        <input type="text" id="username" placeholder="Seu nome">
+        <button onclick="entrar()">Entrar</button>
+        <p id="error"></p>
+    </div>
+
+    <!-- Conteúdo Protegido -->
+    <div id="content">
+        <h1>Bem-vindo ao Site!</h1>
+        <p>Olá, <strong id="nomeUsuario"></strong>!</p>
+        <p>Este é o conteúdo protegido da página.</p>
+        <p>Aqui você pode colocar qualquer conteúdo HTML que desejar.</p>
+        
+        <h2>Exemplo de Conteúdo</h2>
+        <ul>
+            <li>Item 1</li>
+            <li>Item 2</li>
+            <li>Item 3</li>
+        </ul>
+        
+        <button onclick="sair()">Sair</button>
+    </div>
+
+    <script>
+        function entrar() {
+            const nome = document.getElementById('username').value.trim();
+            const error = document.getElementById('error');
+            
+            if (nome === '') {
+                error.textContent = 'Por favor, digite seu nome!';
+                error.style.display = 'block';
+                return;
+            }
+            
+            // Envia para o servidor validar
+            fetch('/server.php', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({username: nome})
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    // Libera o conteúdo
+                    document.getElementById('loginBox').style.display = 'none';
+                    document.getElementById('content').style.display = 'block';
+                    document.getElementById('nomeUsuario').textContent = nome;
+                } else {
+                    error.textContent = data.message;
+                    error.style.display = 'block';
+                }
+            });
+        }
+        
+        function sair() {
+            document.getElementById('loginBox').style.display = 'block';
+            document.getElementById('content').style.display = 'none';
+            document.getElementById('username').value = '';
+            document.getElementById('error').style.display = 'none';
+        }
+        
+        // Permite enviar com Enter
+        document.getElementById('username').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') entrar();
+        });
+    </script>
+</body>
+</html>
+io
