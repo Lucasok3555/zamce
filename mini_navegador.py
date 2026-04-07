@@ -1,168 +1,121 @@
 #!/usr/bin/env python3
-"""
-Mini Navegador Python - Versão Terminal com Interface Web Simples
-Um navegador minimalista que busca e exibe conteúdo de páginas web.
-"""
+"""Mini navegador com interface gráfica em Python (Qt WebEngine)."""
 
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse
-import re
+import sys
+from urllib.parse import quote_plus
+
+try:
+    from PyQt6.QtCore import QUrl
+    from PyQt6.QtWidgets import (
+        QApplication,
+        QLineEdit,
+        QMainWindow,
+        QMessageBox,
+        QPushButton,
+        QStatusBar,
+        QToolBar,
+    )
+    from PyQt6.QtWebEngineWidgets import QWebEngineView
+except ImportError as exc:
+    print(
+        "Dependências ausentes. Instale com:\n"
+        "  pip install PyQt6 PyQt6-WebEngine\n\n"
+        f"Erro original: {exc}"
+    )
+    sys.exit(1)
 
 
-class MiniNavegador:
+class MiniNavegador(QMainWindow):
+    """Navegador simples com suporte a HTML, CSS e JavaScript."""
+
     def __init__(self):
-        self.sessao = requests.Session()
-        self.sessao.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Mini Navegador Python)'
-        })
-        self.sessao.verify = False  # Desativa verificação SSL para ambientes de teste
-        self.url_atual = None
-        self.historico = []
-        
-        # Suprime warnings de SSL
-        import urllib3
-        urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-    
-    def buscar_pagina(self, url):
-        """Busca uma página web e retorna o conteúdo"""
-        try:
-            # Adiciona http:// se não tiver protocolo
-            if not url.startswith(('http://', 'https://')):
-                url = 'https://' + url
-            
-            resposta = self.sessao.get(url, timeout=10)
-            resposta.raise_for_status()
-            
-            # Atualiza URL atual (pode ter redirecionamento)
-            self.url_atual = resposta.url
-            
-            # Salva no histórico
-            self.historico.append(self.url_atual)
-            
-            return resposta.text
-        except requests.exceptions.RequestException as e:
-            return f"Erro ao carregar página: {e}"
-    
-    def extrair_texto(self, html):
-        """Extrai texto legível do HTML"""
-        soup = BeautifulSoup(html, 'html.parser')
-        
-        # Remove scripts e styles
-        for script in soup(['script', 'style', 'meta', 'link']):
-            script.decompose()
-        
-        # Obtém texto
-        texto = soup.get_text(separator='\n')
-        
-        # Limpa linhas em branco extras
-        linhas = [linha.strip() for linha in texto.splitlines()]
-        texto_limpo = '\n'.join(linha for linha in linhas if linha)
-        
-        return texto_limpo[:5000]  # Limita tamanho
-    
-    def extrair_links(self, html):
-        """Extrai todos os links da página"""
-        soup = BeautifulSoup(html, 'html.parser')
-        links = []
-        
-        for link in soup.find_all('a', href=True):
-            href = link['href']
-            texto = link.get_text(strip=True)[:50]
-            url_completa = urljoin(self.url_atual, href)
-            
-            if texto:
-                links.append({'texto': texto, 'url': url_completa})
-        
-        return links[:20]  # Limita a 20 links
-    
-    def mostrar_pagina(self, url):
-        """Busca e mostra uma página de forma formatada"""
-        print(f"\n{'='*60}")
-        print(f"Carregando: {url}")
-        print('='*60)
-        
-        html = self.buscar_pagina(url)
-        
-        if html.startswith("Erro"):
-            print(html)
+        super().__init__()
+        self.setWindowTitle("Mini Navegador Python")
+        self.resize(1200, 800)
+
+        self.webview = QWebEngineView()
+        self.setCentralWidget(self.webview)
+
+        self._criar_barra_navegacao()
+        self._conectar_eventos()
+
+        self.webview.setUrl(QUrl("https://duckduckgo.com"))
+
+    def _criar_barra_navegacao(self):
+        toolbar = QToolBar("Navegação")
+        self.addToolBar(toolbar)
+
+        botao_voltar = QPushButton("←")
+        botao_voltar.clicked.connect(self.webview.back)
+        toolbar.addWidget(botao_voltar)
+
+        botao_avancar = QPushButton("→")
+        botao_avancar.clicked.connect(self.webview.forward)
+        toolbar.addWidget(botao_avancar)
+
+        botao_recarregar = QPushButton("⟳")
+        botao_recarregar.clicked.connect(self.webview.reload)
+        toolbar.addWidget(botao_recarregar)
+
+        botao_home = QPushButton("🏠")
+        botao_home.clicked.connect(lambda: self.webview.setUrl(QUrl("https://duckduckgo.com")))
+        toolbar.addWidget(botao_home)
+
+        self.campo_url = QLineEdit()
+        self.campo_url.setPlaceholderText("Digite uma URL (ex: python.org) ou busca")
+        self.campo_url.returnPressed.connect(self.navegar)
+        toolbar.addWidget(self.campo_url)
+
+        botao_ir = QPushButton("Ir")
+        botao_ir.clicked.connect(self.navegar)
+        toolbar.addWidget(botao_ir)
+
+        self.setStatusBar(QStatusBar())
+
+    def _conectar_eventos(self):
+        self.webview.urlChanged.connect(self._atualizar_url)
+        self.webview.loadStarted.connect(lambda: self.statusBar().showMessage("Carregando..."))
+        self.webview.loadFinished.connect(self._finalizar_carregamento)
+
+    def navegar(self):
+        texto = self.campo_url.text().strip()
+        if not texto:
             return
-        
-        print(f"\n📄 URL Atual: {self.url_atual}")
-        print(f"\n{'─'*60}")
-        print("CONTEÚDO DA PÁGINA:")
-        print('─'*60)
-        
-        texto = self.extrair_texto(html)
-        print(texto)
-        
-        # Mostra links encontrados
-        links = self.extrair_links(html)
-        if links:
-            print(f"\n{'─'*60}")
-            print("LINKS ENCONTRADOS:")
-            print('─'*60)
-            for i, link in enumerate(links, 1):
-                print(f"{i}. {link['texto']}")
-                print(f"   → {link['url'][:60]}...")
-        
-        print(f"\n{'='*60}")
-    
-    def mostrar_historico(self):
-        """Mostra o histórico de navegação"""
-        if not self.historico:
-            print("\nHistórico vazio.")
+
+        if " " in texto and not texto.startswith(("http://", "https://")):
+            busca = f"https://duckduckgo.com/?q={quote_plus(texto)}"
+            self.webview.setUrl(QUrl(busca))
             return
-        
-        print("\n📚 HISTÓRICO DE NAVEGAÇÃO:")
-        for i, url in enumerate(self.historico[-10:], 1):  # Últimos 10
-            print(f"{i}. {url}")
-    
-    def menu(self):
-        """Exibe o menu principal"""
-        print("\n" + "="*60)
-        print("🌐 MINI NAVEGADOR PYTHON")
-        print("="*60)
-        print("Comandos disponíveis:")
-        print("  [URL]     - Navegar para uma URL")
-        print("  h         - Mostrar histórico")
-        print("  r         - Recarregar página atual")
-        print("  q         - Sair")
-        print("="*60)
+
+        if not texto.startswith(("http://", "https://")):
+            texto = "https://" + texto
+
+        qurl = QUrl(texto)
+        if qurl.isValid() and qurl.scheme() in {"http", "https"}:
+            self.webview.setUrl(qurl)
+        else:
+            QMessageBox.warning(self, "URL inválida", "Digite uma URL válida.")
+
+    def _atualizar_url(self, url: QUrl):
+        self.campo_url.setText(url.toString())
+
+    def _finalizar_carregamento(self, ok: bool):
+        if ok:
+            self.statusBar().showMessage("Página carregada.", 3000)
+        else:
+            self.statusBar().showMessage("Falha ao carregar página.", 5000)
+            QMessageBox.warning(
+                self,
+                "Erro de carregamento",
+                "Não foi possível abrir a página. Verifique a URL e sua conexão.",
+            )
 
 
 def main():
-    navegador = MiniNavegador()
-    
-    print("\n🌐 Bem-vindo ao Mini Navegador Python!")
-    print("Digite uma URL para começar (ex: example.com)")
-    
-    while True:
-        navegador.menu()
-        
-        if navegador.url_atual:
-            print(f"Página atual: {navegador.url_atual}")
-        
-        entrada = input("\n🔍 Digite comando ou URL: ").strip()
-        
-        if not entrada:
-            continue
-        
-        comando = entrada.lower()
-        
-        if comando == 'q':
-            print("\nObrigado por usar o Mini Navegador Python! 👋")
-            break
-        elif comando == 'h':
-            navegador.mostrar_historico()
-        elif comando == 'r':
-            if navegador.url_atual:
-                navegador.mostrar_pagina(navegador.url_atual)
-            else:
-                print("\nNenhuma página carregada ainda.")
-        else:
-            # Assume que é uma URL
-            navegador.mostrar_pagina(entrada)
+    app = QApplication(sys.argv)
+    janela = MiniNavegador()
+    janela.show()
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
